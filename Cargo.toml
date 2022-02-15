@@ -1,0 +1,20 @@
+[package]
+name = "kvs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Adrian Covaci <adrianmihaicovaci@gmail.com>"]
+description = "A key-value store"
+
+[dev-dependencies]
+assert_cmd = "0.11.0"
+predicates = "1.0.0"
+tempfile = "3.0.7"
+walkdir = "2.2.7"
+
+[features]
+
+[dependencies]
+clap = { version = "3.0.13", features = ["derive"] }
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.78"
+thiserror = "1.0.30"
