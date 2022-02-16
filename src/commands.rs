@@ -2,7 +2,7 @@ use clap::{AppSettings, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Subcommand, Serialize, Deserialize)]
+#[derive(Hash, Debug, Eq, PartialEq, Subcommand, Serialize, Deserialize)]
 pub enum Command {
     #[clap(setting(AppSettings::ArgRequiredElseHelp))]
     Set {

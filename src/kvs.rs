@@ -4,10 +4,12 @@ use crate::{commands::CommandPosition, kvs_error::Result, Command, KvStoreError}
 use std::{
     collections::BTreeMap,
     env::current_dir,
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::PathBuf,
 };
+
+const THRESHOLD: u64 = 8008135;
 
 /// The `KvStore` stores string key/value pairs.
 ///
@@ -27,7 +29,8 @@ pub struct KvStore {
     pub path: PathBuf,
     pub writer: BufWriterWithPos<File>,
     reader: BufReaderWithPos<File>,
-    index: BTreeMap<String, CommandPosition>,
+    pub index: BTreeMap<String, CommandPosition>,
+    dirt: u64,
 }
 
 impl KvStore {
@@ -40,13 +43,20 @@ impl KvStore {
         let curr_position = self.writer.position;
         serde_json::to_writer(&mut self.writer, &command)?;
         self.writer.flush()?;
-        self.index.insert(
+        if let Some(old_value) = self.index.insert(
             key,
             CommandPosition {
                 start: curr_position,
-                length: self.writer.position,
+                length: self.writer.position - curr_position,
             },
-        );
+        ) {
+            self.dirt += old_value.length;
+        }
+
+        if self.dirt >= THRESHOLD {
+            self.compact()?;
+            self.dirt = 0;
+        }
 
         Ok(())
     }
@@ -112,7 +122,7 @@ impl KvStore {
                         key,
                         CommandPosition {
                             start: initial_pos,
-                            length: offset,
+                            length: offset - initial_pos,
                         },
                     );
                 }
@@ -132,7 +142,48 @@ impl KvStore {
             reader,
             writer,
             index,
+            dirt: 0,
         })
+    }
+
+    fn compact(&mut self) -> Result<()> {
+        let mut curr_position = 0;
+        let mut new_values = vec![];
+
+        for cmds in self.index.values_mut() {
+            if self.reader.position != cmds.start {
+                self.reader.seek(SeekFrom::Start(cmds.start))?;
+            }
+            let reader = self.reader.source.get_ref();
+            let taken = reader.take(cmds.length);
+
+            if let Command::Set { value, key } = serde_json::from_reader(taken)? {
+                cmds.start = curr_position;
+                curr_position += cmds.length;
+                new_values.push(Command::Set {
+                    key: key.clone(),
+                    value,
+                });
+            }
+        }
+
+        fs::remove_file(&self.path)?;
+        self.writer = BufWriterWithPos::new(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)?,
+        );
+
+        self.reader = BufReaderWithPos::new(File::open(&self.path)?);
+        for cmd in new_values {
+            serde_json::to_writer(&mut self.writer, &cmd)?;
+        }
+        self.writer.flush()?;
+        self.reader.seek(SeekFrom::Start(0))?;
+        self.writer.seek(SeekFrom::Start(0))?;
+
+        Ok(())
     }
 }
 
@@ -151,6 +202,25 @@ impl<T: Write + Seek> BufWriterWithPos<T> {
     }
 }
 
+impl<T: Write + Seek> Write for BufWriterWithPos<T> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let bytes_written = self.source.write(buf)?;
+        self.position += bytes_written as u64;
+        Ok(bytes_written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.source.flush()
+    }
+}
+
+impl<T: Write + Seek> Seek for BufWriterWithPos<T> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.position = self.source.seek(pos)?;
+        Ok(self.position)
+    }
+}
+
 #[derive(Debug)]
 pub struct BufReaderWithPos<T: Read + Seek> {
     source: BufReader<T>,
@@ -163,18 +233,6 @@ impl<T: Read + Seek> BufReaderWithPos<T> {
             source: BufReader::new(source),
             position: 0,
         }
-    }
-}
-
-impl<T: Write + Seek> Write for BufWriterWithPos<T> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let bytes_written = self.source.write(buf)?;
-        self.position += bytes_written as u64;
-        Ok(bytes_written)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.source.flush()
     }
 }
 
