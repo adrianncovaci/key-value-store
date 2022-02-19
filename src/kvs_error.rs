@@ -18,4 +18,6 @@ pub enum KvStoreError {
     InvalidLogFileCommand,
     #[error("Invalid file")]
     InvalidFile,
+    #[error("Failed to encode/decode")]
+    BincodeError(#[from] bincode::Error),
 }

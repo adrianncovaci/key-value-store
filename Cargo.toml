@@ -6,15 +6,20 @@ authors = ["Adrian Covaci <adrianmihaicovaci@gmail.com>"]
 description = "A key-value store"
 
 [dev-dependencies]
-assert_cmd = "0.11.0"
+assert_cmd = "0.11"
+criterion = "0.3"
 predicates = "1.0.0"
+rand = "0.6.5"
 tempfile = "3.0.7"
 walkdir = "2.2.7"
 
 [features]
 
 [dependencies]
+bincode = "1.3.3"
 clap = { version = "3.0.13", features = ["derive"] }
+env_logger = "0.9.0"
+log = "0.4.14"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.78"
 thiserror = "1.0.30"

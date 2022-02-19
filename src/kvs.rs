@@ -1,6 +1,6 @@
 use serde_json::Deserializer;
 
-use crate::{commands::CommandPosition, kvs_error::Result, Command, KvStoreError};
+use crate::{client_commands::CommandPosition, kvs_error::Result, Command, KvStoreError};
 use std::{
     collections::BTreeMap,
     env::current_dir,
