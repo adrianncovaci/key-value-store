@@ -1,9 +1,9 @@
 use crate::{kvs_error::Result, response::Response};
-use bincode::{de::read::IoReader, deserialize_from, Deserializer};
+use bincode::{de::read::IoReader, deserialize_from, serialize_into, Deserializer};
 use clap::{AppSettings, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufReader, BufWriter, Write},
+    io::{BufReader, BufWriter, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     path::PathBuf,
     process::exit,
@@ -75,16 +75,10 @@ impl KvsClient {
         })
     }
 
-    pub fn send(&mut self, cmd: Command) -> Result<Response> {
-        let cmd = bincode::serialize(&cmd)?;
-
-        let bytes_written = self.writer.write(&cmd)?;
-        println!("{}", bytes_written);
-        self.writer.flush()?;
-
+    pub fn send(&mut self, mut cmd: Command) -> Result<Response> {
+        let _ = serialize_into(self.writer.get_ref(), &mut cmd)?;
         let response = deserialize_from::<_, Response>(&mut self.reader)?;
         println!("{:?}", response);
-
         Ok(response)
     }
 }

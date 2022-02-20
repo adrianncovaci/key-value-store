@@ -5,9 +5,9 @@ use std::{
     process::exit,
 };
 
-use crate::{kvs_error::Result, KvStoreError};
+use crate::{kvs_error::Result, response::Response, KvStoreError};
 use crate::{Command, KvStore};
-use bincode::deserialize_from;
+use bincode::{deserialize_from, serialize_into};
 use clap::Parser;
 use log::info;
 
@@ -83,26 +83,43 @@ impl KvsServer {
 
     fn handle_stream(&mut self, stream: TcpStream) -> Result<()> {
         let cmd = deserialize_from::<_, Command>(&stream)?;
+        println!("{:?}", cmd);
         match cmd {
             Command::Set { key, value } => {
                 self.kvs.set(key.into(), value.into())?;
+                serialize_into(stream, &Response::SetOk)?;
             }
             Command::Get { key } => match self.kvs.get(key.to_string()) {
                 Ok(res) => match res {
-                    Some(value) => println!("{}", value),
+                    Some(value) => {
+                        println!("{}", value.clone());
+                        serialize_into(stream, &Response::GetOk(value))?;
+                    }
                     None => {
                         println!("{}", KvStoreError::KeyNotFound);
+                        serialize_into(
+                            stream,
+                            &Response::Error(format!("{}", KvStoreError::KeyNotFound)),
+                        )?;
                     }
                 },
-                Err(err) => println!("{}", err),
+                Err(err) => {
+                    println!("{}", err);
+                    serialize_into(stream, &Response::Error(format!("{}", err)))?;
+                }
             },
             Command::Rm { key } => match self.kvs.remove(key.into()) {
-                Ok(()) => {}
+                Ok(()) => serialize_into(stream, &Response::RmOk)?,
                 Err(KvStoreError::KeyNotFound) => {
                     println!("{}", KvStoreError::KeyNotFound);
+                    serialize_into(
+                        stream,
+                        &Response::Error(format!("{}", KvStoreError::KeyNotFound)),
+                    )?;
                     exit(1);
                 }
                 Err(err) => {
+                    serialize_into(stream, &Response::Error(format!("{}", err)))?;
                     return Err(err);
                 }
             },
